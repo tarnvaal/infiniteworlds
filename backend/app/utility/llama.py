@@ -1,8 +1,8 @@
 from llama_cpp import Llama, llama_log_set
 from ctypes import CFUNCTYPE, c_int, c_char_p, c_void_p
 from os.path import expanduser
-from utility.history import History
-
+from .history import History
+from .gpu import get_free_vram_mib
 
 MODEL_PATH = "~/dev/llm/Harbinger-24B-Q5_K_M.gguf"
 MAX_TOKENS = 32768
@@ -17,9 +17,17 @@ def _noop_log(level, text, user_data):
 _NOOP_LOG_CB = LOG_CB_TYPE(_noop_log)
 llama_log_set(_NOOP_LOG_CB, None)
 
+REQUIRED_VRAM_FREE = 23400
+
 
 class chatter:
     def __init__(self, model_path):
+        if get_free_vram_mib() < REQUIRED_VRAM_FREE:
+            print(
+                f"Not enough VRAM free. Required: {REQUIRED_VRAM_FREE} MiB. Free: {get_free_vram_mib()} MiB."
+            )
+            exit(1)
+            return None
         self.llm = Llama(
             model_path=expanduser(model_path),
             n_ctx=MAX_TOKENS,

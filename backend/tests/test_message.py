@@ -1,6 +1,6 @@
 # test_message.py
 from datetime import datetime
-from utility.message import Message
+from backend.app.utility.message import Message
 
 
 def _make_message(
