@@ -13,3 +13,14 @@ repos:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: .venv/bin/pytest
+        language: system
+        types: [python]
+        args: [backend/tests]
+        pass_filenames: false
+        always_run: true
