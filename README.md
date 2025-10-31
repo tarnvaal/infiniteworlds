@@ -1,4 +1,4 @@
-# Infinite Worlds
+# PersistentDM
 
 A text-based interactive fiction system where an AI acts as a dungeon master.
 
