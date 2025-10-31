@@ -1,0 +1,15 @@
+@baseUrl = http://localhost:8000
+@contentType = application/json
+
+### Health
+# @name health
+GET {{baseUrl}}/health
+
+### Chat
+# @name chat
+POST {{baseUrl}}/chat
+Content-Type: {{contentType}}
+
+{
+  "message": "Hello"
+}
