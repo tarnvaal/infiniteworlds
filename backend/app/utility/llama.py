@@ -1,7 +1,7 @@
 from llama_cpp import Llama, llama_log_set
 from ctypes import CFUNCTYPE, c_int, c_char_p, c_void_p
 from os.path import expanduser
-from utility.history import History
+from .history import History
 
 
 MODEL_PATH = "~/dev/llm/Harbinger-24B-Q5_K_M.gguf"

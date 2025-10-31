@@ -1,5 +1,5 @@
 # history.py
-from utility import message
+from . import message
 from datetime import datetime
 
 
