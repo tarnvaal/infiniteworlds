@@ -47,7 +47,7 @@ class Chatter:
                 n_ctx=MAX_TOKENS,
                 n_gpu_layers=-1,  # Load all layers on GPU
                 n_batch=512,
-                verbose=True,
+                verbose=False,
             )
         except Exception as e:
             print(f"Error: Failed to load model with all layers on GPU: {e}")

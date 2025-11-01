@@ -2,6 +2,8 @@
 
 A text-based interactive fiction system where an AI acts as a dungeon master.
 
+![Example](assets/example.png)
+
 ## Installation
 ```bash
 pip install -r requirements.txt
