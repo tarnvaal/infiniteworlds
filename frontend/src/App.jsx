@@ -42,30 +42,6 @@ function App() {
       <h1>Infinite Worlds</h1>
       <p style={{ fontSize: "0.9rem", color: "#666" }}>Talk to the Dungeon Master</p>
 
-      <form onSubmit={sendMessage} style={{ marginBottom: "1rem" }}>
-        <textarea
-          rows={3}
-          style={{ width: "100%", fontSize: "1rem" }}
-          placeholder="Say something..."
-          value={userInput}
-          onChange={(e) => setUserInput(e.target.value)}
-          disabled={loading}
-        />
-
-        <button
-          type="submit"
-          disabled={loading || userInput.trim() === ""}
-          style={{
-            marginTop: "0.5rem",
-            padding: "0.5rem 1rem",
-            fontSize: "1rem",
-            cursor: loading ? "wait" : "pointer",
-          }}
-        >
-          {loading ? "Thinking..." : "Send"}
-        </button>
-      </form>
-
       {errorMsg && <div style={{ color: "red", marginBottom: "1rem" }}>Error: {errorMsg}</div>}
 
       {responseText && (
