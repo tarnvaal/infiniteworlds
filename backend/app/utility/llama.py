@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 from typing import List, cast
 from llama_cpp import (
     Llama,
@@ -121,7 +123,7 @@ class Chatter:
         except Exception:
             return 10
 
-    def chat(self, user_input: str) -> str:
+    def chat(self, user_input: str, world_facts: str | None = None) -> str:
         # record player message
         self.history.add_message(
             "user",
@@ -134,8 +136,22 @@ class Chatter:
             self.history.build_context(),
         )
 
+        # If world facts are provided, prepend a transient system message
+        # with the facts to guide the model. This message is not recorded
+        # in history and applies only to this completion call.
+        messages: List[ChatCompletionRequestMessage] = context
+        if world_facts:
+            facts_msg: ChatCompletionRequestMessage = {
+                "role": "system",
+                "content": world_facts,
+            }
+            if messages and messages[0].get("role") == "system":
+                messages = [messages[0], facts_msg] + messages[1:]
+            else:
+                messages = [facts_msg] + messages
+
         raw_response = self.llm.create_chat_completion(
-            messages=context,
+            messages=messages,
             max_tokens=512,
             temperature=0.7,
             top_p=0.9,
@@ -157,6 +173,271 @@ class Chatter:
         )
 
         return model_text
+
+    def analyze_conversation_for_memories(
+        self, conversation_context: dict
+    ) -> dict | None:
+        """Analyze a conversation turn to extract memorable facts."""
+        system_prompt = (
+            "You are analyzing a conversation between a player and DM to extract ONE important persistent fact.\n"
+            "Look for the MOST important new information:\n"
+            "- New NPCs introduced (names, relationships, hostility/friendship) - HIGHEST PRIORITY\n"
+            "- Threats or dangers - HIGH PRIORITY\n"
+            "- Character goals or objectives stated by the player\n"
+            "- New locations discovered (names, descriptions)\n"
+            "- Important items mentioned\n"
+            "- World state changes\n"
+            "\n"
+            "CRITICAL: Return EXACTLY ONE JSON object. If there are multiple facts, pick the MOST IMPORTANT one.\n"
+            "Do NOT wrap in markdown code blocks. Do NOT return multiple JSON objects.\n"
+            "\n"
+            "Required JSON structure:\n"
+            '{"summary": "concise fact", "entities": ["entity1", "entity2"], '
+            '"type": "npc|location|item|goal|threat|world_state|other", '
+            '"confidence": 0.85, '
+            '"npc": {"name": "Name", "aliases": ["..."], "last_seen_location": "...", "intent": "...", "relationship_to_player": "hostile|friendly|neutral|unknown", "confidence": 0.0}}\n'
+            "\n"
+            'If NO new persistent information, return: {"summary": "NO_CHANGES", "entities": [], "type": "none", "confidence": 0.0}\n'
+            "\n"
+            "Good examples:\n"
+            '{"summary": "MadHatter Finnigan is hostile to player and attacks on sight", "entities": ["MadHatter Finnigan", "player"], "type": "threat", "confidence": 0.95}\n'
+            '{"summary": "Player wants to upgrade their cybernetics", "entities": ["player", "cybernetics"], "type": "goal", "confidence": 0.8}\n'
+            '{"summary": "BodyShop 2077 is a cybernetics store in the mall", "entities": ["BodyShop 2077"], "type": "location", "confidence": 0.75}\n'
+            '{"summary": "Finnigan stalked the player near BodyShop 2077", "entities": ["MadHatter Finnigan", "BodyShop 2077"], "type": "npc", "confidence": 0.9, "npc": {"name": "MadHatter Finnigan", "aliases": ["Finnigan"], "last_seen_location": "BodyShop 2077", "intent": "hunt the player", "relationship_to_player": "hostile", "confidence": 0.9}}\n'
+            "\n"
+            "What NOT to store:\n"
+            "- Generic atmosphere/descriptions\n"
+            "- Temporary moment-to-moment actions\n"
+            "\n"
+            "Rules:\n"
+            "- Prefer 'npc' type with an 'npc' object when a named character is involved.\n"
+            "- Include last_seen_location when known; infer relationship if implied (e.g., attacks -> hostile).\n"
+            "- Avoid adding generic 'player' to entities unless it adds disambiguation.\n"
+            "\n"
+            "Return ONLY the JSON object, nothing else."
+        )
+
+        user_message = conversation_context.get("user_message", "")
+        dm_response = conversation_context.get("dm_response", "")
+
+        user_prompt = (
+            f"Player: {user_message}\n\n"
+            f"DM: {dm_response}\n\n"
+            "Extract any persistent facts that should be remembered. Return the JSON object:"
+        )
+
+        result = self._complete_json(
+            system_prompt, user_prompt, "memory_analysis", debug=True
+        )
+        if not result:
+            return None
+
+        required_keys = {"summary", "entities", "type", "confidence"}
+        if not all(key in result for key in required_keys):
+            return None
+
+        if result.get("summary") == "NO_CHANGES" or result.get("type") == "none":
+            return None
+
+        return result
+
+    def summarize_world_changes(
+        self, planner_json: dict, resolved_outcome: dict | None = None
+    ) -> dict | None:
+        """Use LLM to summarize world changes from planner responses."""
+        system_prompt = (
+            "You are analyzing a narrative planner's response to extract important persistent facts.\n"
+            "Look for:\n"
+            "- New NPCs introduced (names, relationships, hostility)\n"
+            "- New locations discovered\n"
+            "- Important items or goals mentioned\n"
+            "- Changes to relationships or world state\n"
+            "- Player objectives or threats\n"
+            "\n"
+            "Return ONLY a valid JSON object with this exact structure:\n"
+            '{"summary": "concise fact to remember", "entities": ["entity1", "entity2"], '
+            '"type": "world_change|entity_change|relationship_change|knowledge_change|location_change|other", '
+            '"confidence": 0.0-1.0}\n'
+            "\n"
+            'If NO new persistent information is introduced, return: {"summary": "NO_CHANGES", "entities": [], "type": "none", "confidence": 0.0}\n'
+            "Be generous - if the player mentions a new NPC name or important fact, that should be stored."
+        )
+
+        planner_text = self._safe_truncate(json.dumps(planner_json, indent=2), 1000)
+        outcome_text = ""
+        if resolved_outcome:
+            outcome_text = f"\n\nResolved Outcome:\n{self._safe_truncate(json.dumps(resolved_outcome, indent=2), 500)}"
+
+        user_prompt = (
+            f"Planner Response:\n{planner_text}{outcome_text}\n\n"
+            "Task: If significant world changes occurred, provide a concise summary. Focus on:\n"
+            "- New information that persists\n"
+            "- Changes to relationships, locations, or items\n"
+            "- Security or political developments\n\n"
+            "Return the JSON object:"
+        )
+
+        result = self._complete_json(system_prompt, user_prompt, "world_change_summary")
+        if not result:
+            return None
+
+        required_keys = {"summary", "entities", "type", "confidence"}
+        if not all(key in result for key in required_keys):
+            return None
+
+        if result.get("summary") == "NO_CHANGES" or result.get("type") == "none":
+            return None
+
+        return result
+
+    def get_planner_response(
+        self,
+        world_facts: list[dict],
+        recent_scene: list[dict],
+        player_action: str,
+        debug: bool = False,
+    ) -> dict | None:
+        """Get a planner response for a player action using world context."""
+        from app.world.queries import make_planner_prompt
+
+        prompt = make_planner_prompt(world_facts, recent_scene, player_action)
+
+        # Extract system and user messages from the prompt
+        system_content = prompt[0]["content"]
+        user_content = (
+            prompt[1]["content"]
+            if len(prompt) > 1
+            else "Analyze this situation and return the JSON response."
+        )
+
+        # Complete the JSON response
+        result = self._complete_json(
+            system_content, user_content, "planner_response", debug=debug
+        )
+        return result
+
+    def _complete_json(
+        self, system: str, user: str, request_type: str, debug: bool = False
+    ) -> dict | None:
+        """Complete a prompt expecting JSON response with retry on parse failure."""
+        messages = cast(
+            List[ChatCompletionRequestMessage],
+            [{"role": "system", "content": system}, {"role": "user", "content": user}],
+        )
+
+        for attempt in range(2):
+            try:
+                raw_response = self.llm.create_chat_completion(
+                    messages=messages,
+                    max_tokens=1024,  # Increased to handle complex planner responses
+                    temperature=0.2,
+                    top_p=0.8,
+                    frequency_penalty=0.0,
+                    presence_penalty=0.0,
+                    stream=False,
+                )
+
+                response = cast(CreateChatCompletionResponse, raw_response)
+                model_text = response["choices"][0]["message"]["content"] or ""
+
+                if debug:
+                    print(f"\n[{request_type}] Attempt {attempt + 1} - Raw response:")
+                    print(
+                        f"  Text: {model_text[:200]}{'...' if len(model_text) > 200 else ''}"
+                    )
+
+                # Strip markdown code fences if present
+                cleaned_text = model_text.strip()
+                if cleaned_text.startswith("```json"):
+                    cleaned_text = cleaned_text[7:]  # Remove ```json
+                elif cleaned_text.startswith("```"):
+                    cleaned_text = cleaned_text[3:]  # Remove ```
+                if cleaned_text.endswith("```"):
+                    cleaned_text = cleaned_text[:-3]  # Remove trailing ```
+                cleaned_text = cleaned_text.strip()
+
+                # Handle multiple JSON objects - take only the first one
+                # Find the first complete JSON object
+                if cleaned_text.startswith("{"):
+                    brace_count = 0
+                    first_obj_end = -1
+                    for i, char in enumerate(cleaned_text):
+                        if char == "{":
+                            brace_count += 1
+                        elif char == "}":
+                            brace_count -= 1
+                            if brace_count == 0:
+                                first_obj_end = i + 1
+                                break
+
+                    if first_obj_end > 0:
+                        cleaned_text = cleaned_text[:first_obj_end]
+
+                # Fix common JSON formatting errors
+                cleaned_text = cleaned_text.replace(
+                    ' "confidence": 0. ', ' "confidence": 0.'
+                )
+                # Fix "confidence": 0. 95 -> "confidence": 0.95
+                cleaned_text = re.sub(
+                    r'"confidence"\s*:\s*0\.\s+', '"confidence": 0.', cleaned_text
+                )
+
+                # Try to parse as JSON
+                try:
+                    parsed = json.loads(cleaned_text)
+                    if isinstance(parsed, dict):
+                        if debug:
+                            print("  ✓ Valid JSON parsed")
+                        return parsed
+                    elif debug:
+                        print(f"  ✗ Parsed but not a dict: {type(parsed)}")
+                except json.JSONDecodeError as e:
+                    if debug:
+                        print(f"  ✗ JSON parse error: {e}")
+                    if attempt == 0:
+                        # Retry with correction prompt
+                        correction_prompt = (
+                            f"Previous response was not valid JSON: {model_text[:100]}...\n"
+                            "Please return ONLY a valid JSON object with the required structure."
+                        )
+                        messages.append({"role": "assistant", "content": model_text})
+                        messages.append({"role": "user", "content": correction_prompt})
+                        continue
+                    return None
+
+            except Exception as e:
+                if debug:
+                    print(f"  ✗ Exception during generation: {e}")
+                return None
+
+        return None
+
+    def _safe_truncate(self, text: str, max_tokens: int) -> str:
+        """Truncate text to approximately max_tokens, preserving word boundaries."""
+        if not text:
+            return text
+
+        try:
+            tokens = self.llm.tokenize(text.encode("utf-8"))
+            if len(tokens) <= max_tokens:
+                return text
+
+            truncated_tokens = tokens[:max_tokens]
+            truncated_bytes = self.llm.detokenize(truncated_tokens)
+            truncated_text = truncated_bytes.decode("utf-8", errors="ignore")
+
+            last_space = truncated_text.rfind(" ")
+            if last_space > len(truncated_text) * 0.8:
+                truncated_text = truncated_text[:last_space]
+
+            return truncated_text + "..."
+
+        except Exception:
+            chars_per_token = 4
+            max_chars = max_tokens * chars_per_token
+            if len(text) <= max_chars:
+                return text
+            return text[:max_chars] + "..."
 
 
 if __name__ == "__main__":

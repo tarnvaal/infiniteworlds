@@ -46,9 +46,13 @@ def dot_sim(a: List[float], b: List[float]) -> float:
     return total
 
 
+def get_embedding_model(device: str | None = None) -> EmbeddingModel:
+    """Convenience function to get an initialized embedding model."""
+    return EmbeddingModel(device=device)
+
+
 if __name__ == "__main__":
     # Test basic embedding functionality
-    print("Initializing embedding model...")
     embed_model = EmbeddingModel()
 
     print("Testing embedding similarity...")
