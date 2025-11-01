@@ -78,6 +78,38 @@
     #messages::-webkit-scrollbar-thumb { background: #FF6600; border-radius: 4px; }
     #messages::-webkit-scrollbar-thumb:hover { background: #FF8533; }
 
+    /* Controls row with icon buttons */
+    #controls {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+      align-items: center;
+    }
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      border: 1px solid #4a555c;
+      background: #1e2a30;
+      color: #c9d1d9; /* currentColor drives SVG stroke */
+      cursor: pointer;
+      transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.05s ease;
+    }
+    .icon-btn:hover {
+      background: #26343b;
+      border-color: #FF6600;
+      color: #FF6600;
+    }
+    .icon-btn:active { transform: translateY(1px); }
+    .icon-btn svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+    }
+
     .msg {
       padding: 0.6rem 1rem;
       margin: 0.2rem 0;
@@ -173,6 +205,14 @@
 
   <div id="chat-app">
     <div class="chat-container">
+      <div id="controls">
+        <button class="icon-btn" id="btn-clear" aria-label="Clear chat">
+          <!-- Heroicons Outline: Trash -->
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21a48.108 48.108 0 0 0-3.478-.397m-12 .397a48.108 48.108 0 0 1 3.478-.397m7.5 0V4.5A2.25 2.25 0 0 0 14.25 2.25h-4.5A2.25 2.25 0 0 0 7.5 4.5V5.79m10.5 0a48.667 48.667 0 0 1-7.5 0M5.25 6.75 4.5 19.5A2.25 2.25 0 0 0 6.75 21h10.5A2.25 2.25 0 0 0 19.5 19.5l-.75-12.75" />
+          </svg>
+        </button>
+      </div>
       <div id="messages"></div>
       <form id="chat-form">
         <input id="message-input" type="text" placeholder="Type a message and press Enter…" autocomplete="off" />
@@ -263,6 +303,24 @@
         sendBtn.disabled = input.value.trim().length === 0;
       });
       sendBtn.disabled = true;
+
+      // Clear chat UI button (does not modify history)
+      const clearBtn = document.getElementById('btn-clear');
+      if (clearBtn) clearBtn.addEventListener('click', async () => {
+        try {
+          const res = await fetch(`${apiBase}/chat/clear`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ clear: true }),
+          });
+          if (res.ok) {
+            history.length = 0; // reset client-side view state
+            render();
+          }
+        } catch (_) {
+          // ignore
+        }
+      });
 
     })();
   </script>
