@@ -9,6 +9,29 @@ BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 HOST="${HOST:-0.0.0.0}"
 
+kill_processes_on_port() {
+  local port="$BACKEND_PORT"
+  # Find PIDs listening on the port using lsof if available, otherwise ss
+  local pids=""
+  if command -v lsof >/dev/null 2>&1; then
+    pids=$(lsof -ti tcp:"$port" -sTCP:LISTEN || true)
+  else
+    pids=$(ss -ltnp 2>/dev/null | awk -v p=":$port" '$4 ~ p {print $NF}' | sed -E 's/.*pid=([0-9]+).*/\1/' | sort -u || true)
+  fi
+
+  if [ -n "$pids" ]; then
+    echo "[start] Port $port in use by PIDs: $pids. Attempting to stop them..."
+    kill $pids >/dev/null 2>&1 || true
+    sleep 0.5
+    # Force kill any survivors
+    for pid in $pids; do
+      if kill -0 "$pid" >/dev/null 2>&1; then
+        kill -9 "$pid" >/dev/null 2>&1 || true
+      fi
+    done
+  fi
+}
+
 start_backend() {
   cd "$BACKEND_DIR"
   if [ ! -d ".venv" ]; then
@@ -17,6 +40,8 @@ start_backend() {
   fi
   # shellcheck disable=SC1091
   source .venv/bin/activate
+  # Ensure the port is free before starting
+  kill_processes_on_port
   echo "[start] Launching backend: uvicorn $APP_IMPORT --host $HOST --port $BACKEND_PORT"
   nohup python -m uvicorn "$APP_IMPORT" --host "$HOST" --port "$BACKEND_PORT" --reload > "$BACKEND_DIR/backend.log" 2>&1 &
   echo $! > "$BACKEND_DIR/.backend.pid"

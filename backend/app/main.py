@@ -22,19 +22,15 @@ app = FastAPI(title="PersistentDM API", lifespan=lifespan)
 # allow React dev server to talk to API in development
 # Support dynamic frontend port (Vite may use 5173-5180 range)
 FRONTEND_PORT = os.getenv("FRONTEND_PORT", "5173")
-allowed_origins = [
-    f"http://localhost:{FRONTEND_PORT}",
-    f"http://127.0.0.1:{FRONTEND_PORT}",
-]
-# Also allow common Vite fallback ports in case port is in use
-for port in range(5173, 5180):
-    if str(port) != FRONTEND_PORT:
-        allowed_origins.extend(
-            [
-                f"http://localhost:{port}",
-                f"http://127.0.0.1:{port}",
-            ]
-        )
+allowed_origins = []
+# Allow all common Vite ports (5173-5180) for both localhost and 127.0.0.1
+for port in range(5173, 5181):  # 5181 to include 5180
+    allowed_origins.extend(
+        [
+            f"http://localhost:{port}",
+            f"http://127.0.0.1:{port}",
+        ]
+    )
 
 app.add_middleware(
     CORSMiddleware,

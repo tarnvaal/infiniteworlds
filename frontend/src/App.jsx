@@ -1,7 +1,12 @@
 import { useMemo, useState } from "react";
 
 function App() {
-  const apiBase = useMemo(() => "http://localhost:8000", []);
+  const apiBase = useMemo(() => {
+    const configured = import.meta.env.VITE_API_BASE_URL;
+    if (configured) return configured;
+    const host = window.location.hostname || "127.0.0.1";
+    return `http://${host}:8000`;
+  }, []);
   const [history, setHistory] = useState([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
