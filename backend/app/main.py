@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
+import os
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from .routers.chat import router as chat_router
 from .dependencies import get_chatter
@@ -14,7 +16,32 @@ async def lifespan(app: FastAPI):
     # Shutdown: (if needed in the future)
 
 
-app = FastAPI(title="Infinite Worlds API", lifespan=lifespan)
+app = FastAPI(title="PersistentDM API", lifespan=lifespan)
+
+# allow React dev server to talk to API in development
+# Support dynamic frontend port (Vite may use 5173-5180 range)
+FRONTEND_PORT = os.getenv("FRONTEND_PORT", "5173")
+allowed_origins = [
+    f"http://localhost:{FRONTEND_PORT}",
+    f"http://127.0.0.1:{FRONTEND_PORT}",
+]
+# Also allow common Vite fallback ports in case port is in use
+for port in range(5173, 5180):
+    if str(port) != FRONTEND_PORT:
+        allowed_origins.extend(
+            [
+                f"http://localhost:{port}",
+                f"http://127.0.0.1:{port}",
+            ]
+        )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")

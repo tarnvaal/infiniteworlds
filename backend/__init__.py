@@ -1,1 +1,1 @@
-"""Backend package for Infinite Worlds."""
+"""Backend package for Persistent Dungeon Master."""

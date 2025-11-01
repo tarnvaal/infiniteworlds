@@ -1,0 +1,14 @@
+{
+  "name": "persistentdm",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c red,blue \"uvicorn backend.app.main:app --reload\" \"cd frontend && npm run dev\"",
+    "api": "uvicorn backend.app.main:app --reload",
+    "web": "cd frontend && npm run dev",
+    "test": "pytest -q"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
