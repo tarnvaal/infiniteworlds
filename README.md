@@ -17,8 +17,10 @@ pip install -r requirements.txt
 ```
 
 ## Usage
-Model Source - https://huggingface.co/LatitudeGames/Harbinger-24B
-ggufs here https://huggingface.co/LatitudeGames/Harbinger-24B-GGUF
+
+Model Source: [Harbinger-24B](https://huggingface.co/LatitudeGames/Harbinger-24B)
+
+GGUF files: [Harbinger-24B-GGUF](https://huggingface.co/LatitudeGames/Harbinger-24B-GGUF)
 
 1. Optional: set `MODEL_PATH` (defaults to `~/dev/llm/Harbinger-24B-Q5_K_M.gguf`). Requires an NVIDIA GPU with ~23 GiB free VRAM.
    - Linux/macOS: `export MODEL_PATH=/absolute/path/to/model.gguf`
@@ -32,11 +34,18 @@ ggufs here https://huggingface.co/LatitudeGames/Harbinger-24B-GGUF
    - Chat: `POST /chat` with JSON `{ "message": "Hello" }`
    - See `requests.rest` for ready-made requests
 
-## NodeJS
-- Target: Node 18+ (built-in `fetch`).
-  Set `API_BASE_URL` as needed (e.g., `http://localhost:8000`).
+## Node.js
 
-# MUST be built from source with CUDA enabled, do NOT let pip pull CPU wheel
-# To install on a fresh venv:
-#   CMAKE_ARGS="-DGGML_CUDA=on" \
-#   pip install --no-binary=:all: --no-cache-dir llama-cpp-python==0.3.16
+- Target: Node 18+ (built-in `fetch`).
+- Set `API_BASE_URL` as needed (e.g., `http://localhost:8000`).
+
+## Important Installation Notes
+
+**MUST be built from source with CUDA enabled, do NOT let pip pull CPU wheel**
+
+To install on a fresh venv:
+
+```bash
+CMAKE_ARGS="-DGGML_CUDA=on" \
+pip install --no-binary=:all: --no-cache-dir llama-cpp-python==0.3.16
+```
