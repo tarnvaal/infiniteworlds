@@ -1,4 +1,12 @@
-from llama_cpp import Llama, llama_log_set
+from __future__ import annotations
+
+from typing import List, cast
+from llama_cpp import (
+    Llama,
+    llama_log_set,
+    CreateChatCompletionResponse,
+    ChatCompletionRequestMessage,
+)
 from ctypes import CFUNCTYPE, c_int, c_char_p, c_void_p
 from os.path import expanduser
 from .history import History
@@ -6,6 +14,8 @@ from .gpu import get_free_vram_mib
 
 MODEL_PATH = "~/dev/llm/Harbinger-24B-Q5_K_M.gguf"
 MAX_TOKENS = 32768
+TOKEN_BUFFER_SIZE = 2048
+MIN_FREE_VRAM_MIB = 23400  # tune this to whatever you actually need
 
 LOG_CB_TYPE = CFUNCTYPE(None, c_int, c_char_p, c_void_p)
 
@@ -15,19 +25,17 @@ def _noop_log(level, text, user_data):
 
 
 _NOOP_LOG_CB = LOG_CB_TYPE(_noop_log)
-llama_log_set(_NOOP_LOG_CB, None)
-
-REQUIRED_VRAM_FREE = 23400
+llama_log_set(_NOOP_LOG_CB, None)  # type: ignore
 
 
-class chatter:
-    def __init__(self, model_path):
-        if get_free_vram_mib() < REQUIRED_VRAM_FREE:
-            print(
-                f"Not enough VRAM free. Required: {REQUIRED_VRAM_FREE} MiB. Free: {get_free_vram_mib()} MiB."
-            )
+class Chatter:
+    def __init__(self, model_path: str):
+        free_vram = get_free_vram_mib()
+        # exit only if not enough VRAM
+        if free_vram is not None and free_vram < MIN_FREE_VRAM_MIB:
+            print(f"Not enough VRAM free. Free VRAM: {free_vram} MiB.")
             exit(1)
-            return None
+
         self.llm = Llama(
             model_path=expanduser(model_path),
             n_ctx=MAX_TOKENS,
@@ -38,15 +46,16 @@ class chatter:
 
         self.sysprompt_role = "DM"
         self.sysprompt_content = (
-            "You are a the dungeon master."
-            "You describe the world to the player in second person present tense."
+            "You are the dungeon master. "
+            "You describe the world to the player in second person present tense. "
             "You end each response with a question to the player."
         )
+
         self.sysprompt_tokens = self.llm.tokenize(
             self.sysprompt_content.encode("utf-8")
         )
 
-        self.token_buffer_size = 2048
+        self.token_buffer_size = TOKEN_BUFFER_SIZE
         self.max_history_tokens = MAX_TOKENS - self.token_buffer_size
 
         self.history = History(
@@ -57,7 +66,6 @@ class chatter:
         )
 
     def _get_token_count(self, content: str) -> int:
-        # approximate the token count.
         try:
             tokens = self.llm.tokenize(content.encode("utf-8"))
             return len(tokens) + 5
@@ -66,31 +74,48 @@ class chatter:
             return 10
 
     def chat(self, user_input: str) -> str:
-        self.history.add_message("user", user_input, self._get_token_count(user_input))
-        context = self.history.build_context()
-        response = self.llm.create_chat_completion(
+        # record player message
+        self.history.add_message(
+            "user",
+            user_input,
+            self._get_token_count(user_input),
+        )
+
+        context = cast(
+            List[ChatCompletionRequestMessage],
+            self.history.build_context(),
+        )
+
+        raw_response = self.llm.create_chat_completion(
             messages=context,
             max_tokens=512,
             temperature=0.7,
             top_p=0.9,
             frequency_penalty=0.0,
             presence_penalty=0.0,
+            stream=False,
         )
-        # we need to send the player a message with the assistant role first
-        assistant_reply = (
-            f"{self.sysprompt_role}: {response['choices'][0]['message']['content']}"
-        )
+
+        response = cast(CreateChatCompletionResponse, raw_response)
+
+        model_text = response["choices"][0]["message"]["content"]
+
+        assistant_reply = f"{self.sysprompt_role}: {model_text}"
+
+        # record assistant message
         self.history.add_message(
-            "assistant", assistant_reply, self._get_token_count(assistant_reply)
+            "assistant",
+            assistant_reply,
+            self._get_token_count(assistant_reply),
         )
 
         return assistant_reply
 
 
 if __name__ == "__main__":
-    chatter = chatter(MODEL_PATH)
+    dm = Chatter(MODEL_PATH)
     while True:
         user_input = input("You: ")
         if user_input.lower() in ["exit", "quit", "bye"]:
             break
-        print(f"{chatter.sysprompt_role}: {chatter.chat(user_input)}")
+        print(f"{dm.sysprompt_role}: {dm.chat(user_input)}")
