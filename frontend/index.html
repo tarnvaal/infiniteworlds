@@ -45,7 +45,7 @@
           for (const item of history) {
             const div = document.createElement('div');
             div.className = `msg ${item.role === 'user' ? 'user' : 'bot'}`;
-            div.textContent = (item.role === 'user' ? 'You: ' : 'Bot: ') + item.content;
+            div.textContent = (item.role === 'user' ? 'You: ' : 'DM: ') + item.content;
             messagesEl.appendChild(div);
           }
           messagesEl.scrollTop = messagesEl.scrollHeight;

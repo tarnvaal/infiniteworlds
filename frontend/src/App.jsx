@@ -39,8 +39,8 @@ function App() {
 
   return (
     <div style={{ maxWidth: "600px", margin: "2rem auto", fontFamily: "sans-serif" }}>
-      <h1>Infinite Worlds</h1>
-      <p style={{ fontSize: "0.9rem", color: "#666" }}>Talk to the Dungeon Master</p>
+      <h1>Persistent Dungeon Master</h1>
+      <p style={{ fontSize: "0.9rem", color: "#666" }}>Explore any world you can imagine</p>
 
       {errorMsg && <div style={{ color: "red", marginBottom: "1rem" }}>Error: {errorMsg}</div>}
 

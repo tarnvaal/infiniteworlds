@@ -1,8 +1,8 @@
 {
   "venvPath": ".",
   "venv": ".venv",
-  "pythonVersion": "3.13",
+  "pythonVersion": "3.11",
   "typeCheckingMode": "basic",
-  "reportMissingImports": true,
+  "reportMissingImports": false,
   "reportMissingTypeStubs": false
 }

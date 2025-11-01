@@ -35,3 +35,8 @@ ggufs here https://huggingface.co/LatitudeGames/Harbinger-24B-GGUF
 ## NodeJS
 - Target: Node 18+ (built-in `fetch`).
   Set `API_BASE_URL` as needed (e.g., `http://localhost:8000`).
+
+# MUST be built from source with CUDA enabled, do NOT let pip pull CPU wheel
+# To install on a fresh venv:
+#   CMAKE_ARGS="-DGGML_CUDA=on" \
+#   pip install --no-binary=:all: --no-cache-dir llama-cpp-python==0.3.16

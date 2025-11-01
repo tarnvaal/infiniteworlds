@@ -31,20 +31,30 @@ llama_log_set(_NOOP_LOG_CB, None)  # type: ignore
 class Chatter:
     def __init__(self, model_path: str):
         free_vram = get_free_vram_mib()
-        # exit only if not enough VRAM
-        if free_vram is not None and free_vram < MIN_FREE_VRAM_MIB:
-            print(f"Not enough VRAM free. Free VRAM: {free_vram} MiB.")
+        # GPU is required
+        if free_vram is None:
+            print("Error: No GPU detected. GPU is required.")
+            exit(1)
+        if free_vram < MIN_FREE_VRAM_MIB:
+            print(
+                f"Not enough VRAM free. Free VRAM: {free_vram} MiB. Required: {MIN_FREE_VRAM_MIB} MiB."
+            )
             exit(1)
 
-        self.llm = Llama(
-            model_path=expanduser(model_path),
-            n_ctx=MAX_TOKENS,
-            n_gpu_layers=-1,
-            n_batch=512,
-            verbose=False,
-        )
+        try:
+            self.llm = Llama(
+                model_path=expanduser(model_path),
+                n_ctx=MAX_TOKENS,
+                n_gpu_layers=-1,  # Load all layers on GPU
+                n_batch=512,
+                verbose=True,
+            )
+        except Exception as e:
+            print(f"Error: Failed to load model with all layers on GPU: {e}")
+            exit(1)
 
-        self.sysprompt_role = "DM"
+        self.sysprompt_role = "system"
+        self.display_name = "DM"
         self.sysprompt_content = (
             "You are the dungeon master. "
             "You describe the world to the player in second person present tense. "
@@ -100,16 +110,18 @@ class Chatter:
 
         model_text = response["choices"][0]["message"]["content"]
 
-        assistant_reply = f"{self.sysprompt_role}: {model_text}"
+        # Handle empty/None responses
+        if not model_text:
+            model_text = "[No response generated]"
 
-        # record assistant message
+        # record assistant message (no prefix needed, frontend handles display)
         self.history.add_message(
             "assistant",
-            assistant_reply,
-            self._get_token_count(assistant_reply),
+            model_text,
+            self._get_token_count(model_text),
         )
 
-        return assistant_reply
+        return model_text
 
 
 if __name__ == "__main__":
@@ -118,4 +130,4 @@ if __name__ == "__main__":
         user_input = input("You: ")
         if user_input.lower() in ["exit", "quit", "bye"]:
             break
-        print(f"{dm.sysprompt_role}: {dm.chat(user_input)}")
+        print(dm.chat(user_input))
