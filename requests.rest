@@ -13,3 +13,11 @@ Content-Type: {{contentType}}
 {
   "message": "Hello"
 }
+
+### Clear
+POST {{baseUrl}}/chat/clear
+Content-Type: {{contentType}}
+
+{
+  "clear": true
+}
