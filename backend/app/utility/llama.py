@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import os
 from typing import List, cast
 from llama_cpp import (
     Llama,
@@ -15,7 +16,8 @@ from .history import History
 from .gpu import get_free_vram_mib
 
 MODEL_PATH = "~/dev/llm/Harbinger-24B-Q5_K_M.gguf"
-MAX_TOKENS = 32768
+# Allow context size override via env; default to 16k for tighter history window
+MAX_TOKENS = int(os.getenv("MAX_CONTEXT_TOKENS", "16384"))
 TOKEN_BUFFER_SIZE = 2048
 MIN_FREE_VRAM_MIB = 23400  # tune this to whatever you actually need
 

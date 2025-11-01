@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ..dependencies import get_chatter, reset_chatter
+from ..dependencies import get_conversation_service, reset_chatter
 
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -33,9 +33,9 @@ def clear_chat(req: ClearRequest):
 
 
 @router.post("", response_model=ChatResponse)
-def post_chat(req: ChatRequest, chatter=Depends(get_chatter)):
+def post_chat(req: ChatRequest, conversation=Depends(get_conversation_service)):
     try:
-        reply = chatter.chat(req.message)
+        reply = conversation.handle_user_message(req.message)
         return ChatResponse(reply=reply)
     except Exception as e:
         raise HTTPException(

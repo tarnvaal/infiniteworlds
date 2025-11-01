@@ -9,6 +9,8 @@ PersistentDM implements an AI dungeon master for text-based role-playing games. 
 ### Key Features
 
 - Persistent world memory with vector similarity search
+- World-aware replies: injects relevant World Facts and NPC Cards into the LLM prompt
+- Automatic memory extraction from each conversation turn (stores significant facts/NPC snapshots)
 - FastAPI backend with automatic CORS handling
 - React frontend with Tailwind CSS
 - Llama.cpp integration for local LLM inference
@@ -21,6 +23,7 @@ PersistentDM implements an AI dungeon master for text-based role-playing games. 
 - **Framework**: FastAPI with automatic API documentation
 - **LLM Integration**: llama-cpp-python with CUDA acceleration
 - **World Memory**: Vector-based memory system using embeddings for similarity search
+- **Conversation Orchestration**: `ConversationService` composes `Chatter` and `WorldMemory`, retrieves relevant memories and NPC snapshots, formats World Facts + NPC Cards, injects them into the LLM call, and persists new memories
 - **Model**: Harbinger-24B-GGUF (quantized for ~23GB VRAM usage)
 
 ### Frontend
@@ -70,6 +73,11 @@ Set the model path:
 ```bash
 export MODEL_PATH=/absolute/path/to/Harbinger-24B-Q5_K_M.gguf
 ```
+Optionally set the maximum model context window (default 16384 tokens):
+```bash
+export MAX_CONTEXT_TOKENS=16384
+```
+
 
 Default path: `~/dev/llm/Harbinger-24B-Q5_K_M.gguf`
 
@@ -129,6 +137,14 @@ cd frontend && npm run preview
 
 See `requests.rest` for example API calls.
 
+### Request Flow (Chat)
+- Frontend POSTs `{ "message": string }` to `/chat`
+- Backend router delegates to `ConversationService.handle_user_message`
+- Service retrieves relevant memories (weighted by similarity/recency/type) and NPC snapshots
+- Service formats World Facts and NPC Cards and injects them as a transient system message
+- `Chatter.chat` generates the DM reply; the service analyzes the turn and stores new durable memories when confidence is high
+- Response returns `{ "reply": string }` (no world/memory details are exposed to the client)
+
 ## Testing
 
 Run the test suite:
@@ -158,9 +174,12 @@ PersistentDM/
 │   │   │   ├── embeddings.py    # Vector embeddings
 │   │   │   └── llama.py         # LLM integration
 │   │   └── world/
-│   │       ├── memory.py        # World state memory
-│   │       ├── queries.py       # Memory queries
-│   │       └── summarizer.py    # Memory summarization
+│   │       ├── memory.py              # World state memory (memories + NPC snapshots)
+│   │       ├── context_builder.py     # Weighted retrieval and formatting (World Facts, NPC Cards)
+│   │       ├── conversation_service.py# Orchestrates context injection + memory extraction
+│   │       ├── memory_utils.py        # Helpers for sanitizing entities
+│   │       ├── queries.py             # Memory/planner prompts
+│   │       └── summarizer.py          # Memory summarization
 │   └── tests/                   # Test suite
 ├── frontend/
 │   ├── src/                     # React application

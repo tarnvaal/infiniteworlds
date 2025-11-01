@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 
 function App() {
   const apiBase = useMemo(() => {
@@ -10,6 +10,14 @@ function App() {
   const [history, setHistory] = useState([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const messagesRef = useRef(null);
+
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    // Scroll to bottom on new messages
+    el.scrollTop = el.scrollHeight;
+  }, [history]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -78,7 +86,7 @@ function App() {
           </button>
         </div>
 
-        <div id="messages" className="flex-1 overflow-y-auto p-2 bg-[#1e2a30] rounded-lg mb-4 flex flex-col gap-2">
+        <div id="messages" ref={messagesRef} className="flex-1 overflow-y-auto p-2 bg-[#1e2a30] rounded-lg mb-4 flex flex-col gap-2">
           {history.map((item, idx) => {
             if (item.type === "typing") {
               return (
