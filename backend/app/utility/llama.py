@@ -29,30 +29,33 @@ llama_log_set(_NOOP_LOG_CB, None)  # type: ignore
 
 
 class Chatter:
+    """
+    Chatter instances share one global Llama model in VRAM.
+    The first Chatter() call loads it. Later Chatter() calls reuse it.
+    Each instance still has its own History.
+    """
+
+    # class-level shared state
+    _llm: Llama | None = None
+    _init_error: Exception | None = None
+    _initialized = False  # optional clarity flag
+
     def __init__(self, model_path: str):
-        free_vram = get_free_vram_mib()
-        # GPU is required
-        if free_vram is None:
-            print("Error: No GPU detected. GPU is required.")
-            exit(1)
-        if free_vram < MIN_FREE_VRAM_MIB:
-            print(
-                f"Not enough VRAM free. Free VRAM: {free_vram} MiB. Required: {MIN_FREE_VRAM_MIB} MiB."
-            )
-            exit(1)
+        # step 1: ensure model is initialized at class level
+        if not Chatter._initialized:
+            Chatter._initialize_model(model_path)
 
-        try:
-            self.llm = Llama(
-                model_path=expanduser(model_path),
-                n_ctx=MAX_TOKENS,
-                n_gpu_layers=-1,  # Load all layers on GPU
-                n_batch=512,
-                verbose=False,
+        # if model init failed earlier raise now
+        if Chatter._init_error is not None:
+            raise RuntimeError(
+                f"Failed to initialize shared Llama model: {Chatter._init_error}"
             )
-        except Exception as e:
-            print(f"Error: Failed to load model with all layers on GPU: {e}")
-            exit(1)
 
+        # bind the shared model handle to this instance
+        # at this point _llm must be not None
+        self.llm = cast(Llama, Chatter._llm)
+
+        # step 2: per-instance setup (your old stuff)
         self.sysprompt_role = "system"
         self.display_name = "DM"
         self.sysprompt_content = (
@@ -75,12 +78,47 @@ class Chatter:
             len(self.sysprompt_tokens),
         )
 
+    @classmethod
+    def _initialize_model(cls, model_path: str) -> None:
+        """
+        Load the model into VRAM once.
+        Safe to call multiple times. Only first call actually loads.
+        """
+        if cls._initialized:
+            return  # already tried
+
+        cls._initialized = True  # mark that we attempted init
+
+        # check GPU first
+        free_vram = get_free_vram_mib()
+        if free_vram is None:
+            cls._init_error = RuntimeError("No GPU detected. GPU is required.")
+            return
+        if free_vram < MIN_FREE_VRAM_MIB:
+            cls._init_error = RuntimeError(
+                f"Not enough VRAM free. Free VRAM: {free_vram} MiB. "
+                f"Required: {MIN_FREE_VRAM_MIB} MiB."
+            )
+            return
+
+        # try to actually build llama
+        try:
+            cls._llm = Llama(
+                model_path=expanduser(model_path),
+                n_ctx=MAX_TOKENS,
+                n_gpu_layers=-1,  # put all layers on GPU
+                n_batch=512,
+                verbose=False,
+            )
+        except Exception as e:
+            cls._init_error = e
+            cls._llm = None
+
     def _get_token_count(self, content: str) -> int:
         try:
             tokens = self.llm.tokenize(content.encode("utf-8"))
             return len(tokens) + 5
-        except Exception as e:
-            print(f"Error getting token count: {e}")
+        except Exception:
             return 10
 
     def chat(self, user_input: str) -> str:
@@ -107,14 +145,11 @@ class Chatter:
         )
 
         response = cast(CreateChatCompletionResponse, raw_response)
+        model_text = (
+            response["choices"][0]["message"]["content"] or "[No response generated]"
+        )
 
-        model_text = response["choices"][0]["message"]["content"]
-
-        # Handle empty/None responses
-        if not model_text:
-            model_text = "[No response generated]"
-
-        # record assistant message (no prefix needed, frontend handles display)
+        # record assistant message
         self.history.add_message(
             "assistant",
             model_text,

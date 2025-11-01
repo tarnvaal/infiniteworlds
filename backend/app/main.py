@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import os
+import asyncio
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,8 +11,8 @@ from .dependencies import get_chatter
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Ensure the model is loaded at startup using MODEL_PATH env
-    get_chatter()
+    # Startup: Preload the model in the background so health is immediate
+    asyncio.create_task(asyncio.to_thread(get_chatter))
     yield
     # Shutdown: (if needed in the future)
 
